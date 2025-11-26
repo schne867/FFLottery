@@ -57,9 +57,12 @@ export function TeamCard({ team, combinations, teamIndex, allCombinations = [], 
   return (
     <Card>
       <CardContent sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {/* Team Information (Left Side) */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
+          {/* Spacer on left to balance drag handle */}
+          <Box sx={{ minWidth: 48 }} />
+          
+          {/* Team Information (Center) */}
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <TeamNameWithAvatar
               avatar={team.avatar}
               teamName={team.teamName}
@@ -68,7 +71,7 @@ export function TeamCard({ team, combinations, teamIndex, allCombinations = [], 
               spacing={1}
             />
             
-            <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
               <Typography variant="body2" color="text.secondary">
                 Record: {formatTeamRecord(team)}
               </Typography>
@@ -93,7 +96,7 @@ export function TeamCard({ team, combinations, teamIndex, allCombinations = [], 
 
             {/* Expandable Team Stats */}
             <Collapse in={statsExpanded}>
-              <Box sx={{ mt: 1, pl: 1, borderLeft: 2, borderColor: 'divider' }}>
+              <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <Typography variant="caption" color="text.secondary" display="block">
                   Points For: <strong>{formatPoints(team.pointsFor)}</strong>
                 </Typography>

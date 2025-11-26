@@ -14,6 +14,10 @@ function formatSeason(league) {
 
 /**
  * Format league type
+ * Sleeper API league.settings.type values:
+ * 1 = Redraft
+ * 2 = Dynasty
+ * 3 = Keeper
  */
 function formatLeagueType(league) {
   if (league.settings?.type === 1) {
@@ -23,7 +27,7 @@ function formatLeagueType(league) {
     return 'Dynasty';
   }
   if (league.settings?.type === 3) {
-    return 'Dynasty';
+    return 'Keeper';
   }
   return 'Standard';
 }

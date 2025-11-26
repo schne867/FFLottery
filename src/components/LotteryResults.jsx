@@ -49,6 +49,11 @@ function getPositionLabel(position, total, pickNumber = null) {
  * @param {Function} props.onReset - Callback when reset button is clicked
  */
 export function LotteryResults({ selections, totalTeams, onReset }) {
+  // Reverse selections to show Pick #1 (winner) at top, then #2, #3, etc. downward
+  // Selections come in as [worst pick, ..., Pick #2, Pick #1 (winner)]
+  // We want to display as [Pick #1 (winner), Pick #2, ..., worst pick]
+  const reversedSelections = [...selections].reverse();
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
@@ -65,14 +70,14 @@ export function LotteryResults({ selections, totalTeams, onReset }) {
         </Button>
       </Box>
       <List>
-        {selections.map((selection, index) => (
+        {reversedSelections.map((selection, index) => (
           <ListItem
             key={selection.userId}
             sx={{
               mb: 1,
-              bgcolor: index === selections.length - 1 ? 'success.light' : 'background.paper',
+              bgcolor: index === 0 ? 'success.light' : 'background.paper',
               borderRadius: 2,
-              border: index === selections.length - 1 ? 2 : 0,
+              border: index === 0 ? 2 : 0,
               borderColor: 'success.main',
             }}
           >
