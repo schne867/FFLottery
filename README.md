@@ -47,10 +47,12 @@ npm run dev
 
 ## Lottery Logic
 
-The lottery uses weighted random selection:
-- Each team's chance is proportional to their odds value
-- Selections are made from last place (highest odds) to first place (lowest odds)
-- Once a team is selected, they are removed from the pool for subsequent picks
+The lottery uses the NBA-style Plackett-Luce model for weighted random selection:
+- Each team's chance is proportional to their combination value (odds)
+- **Selections are made from first pick (winner) to last place** - Pick #1 is selected first, then Pick #2, then Pick #3, and so on
+- Uses sampling without replacement: once a team is selected, they are removed from the pool for subsequent picks
+- Probabilities are recalculated after each selection based on remaining teams' combinations
+- The animation displays picks in reverse order (worst pick first, winner last) for dramatic effect, but the actual selection process determines Pick #1 first
 
 ## Technologies Used
 
