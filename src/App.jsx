@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   Container,
   Paper,
@@ -37,7 +37,9 @@ import { DraftHistory } from './components/DraftHistory';
 import { TeamNameWithAvatar } from './components/TeamNameWithAvatar';
 
 function App() {
-  const [leagueId, setLeagueId] = useState('');
+  const [leagueId, setLeagueId] = useState(() => {
+    return sessionStorage.getItem('sleeperLeagueId') || '';
+  });
   const [teams, setTeams] = useState([]);
   const [league, setLeague] = useState(null);
   const [drafts, setDrafts] = useState([]);
@@ -56,6 +58,21 @@ function App() {
   const [confettiInterval, setConfettiInterval] = useState(null);
   const [fullLotteryResults, setFullLotteryResults] = useState([]);
   const skipAnimationRef = useRef(false);
+
+  // Save league ID to session storage when it changes
+  useEffect(() => {
+    if (leagueId) {
+      sessionStorage.setItem('sleeperLeagueId', leagueId);
+    }
+  }, [leagueId]);
+
+  // Auto-load teams on mount if league ID exists in session storage
+  const initialLeagueIdRef = useRef(sessionStorage.getItem('sleeperLeagueId'));
+  useEffect(() => {
+    if (initialLeagueIdRef.current) {
+      handleLoadTeams();
+    }
+  }, []);
 
   // Configure drag and drop sensors (must always be called - React hooks rule)
   const sensors = useSensors(
