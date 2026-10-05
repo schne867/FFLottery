@@ -53,12 +53,9 @@ function App() {
   const [showAnimation, setShowAnimation] = useState(false);
   const [animationStarted, setAnimationStarted] = useState(false);
   const [selections, setSelections] = useState([]);
-  const [currentSelection, setCurrentSelection] = useState(null);
   const [showResults, setShowResults] = useState(false);
   const [teamsForLottery, setTeamsForLottery] = useState([]);
-  const [confettiInterval, setConfettiInterval] = useState(null);
   const [fullLotteryResults, setFullLotteryResults] = useState([]);
-  const skipAnimationRef = useRef(false);
 
   // Save league ID to session storage when it changes
   useEffect(() => {
@@ -101,7 +98,6 @@ function App() {
     setLotterySlots([]); // Reset slots
     setIsRunning(false);
     setSelections([]);
-    setCurrentSelection(null);
     setShowResults(false);
 
     try {
@@ -328,148 +324,36 @@ function App() {
     setError(null);
     setTeamsForLottery(teamsWithCombinations);
     setSelections([]);
-    setCurrentSelection(null);
     setShowResults(false);
     setAnimationStarted(false);
     setShowAnimation(true);
     setFullLotteryResults([]);
-    // Clear any existing confetti
-    if (confettiInterval) {
-      clearInterval(confettiInterval);
-      setConfettiInterval(null);
-    }
-  }, [teams, lotterySlots, confettiInterval]);
+  }, [teams, lotterySlots]);
 
-  // Actually start the lottery animation
+  // Run the lottery instantly, then hand the results to the ball machine to reveal
   const handleStartAnimation = useCallback(async () => {
     if (teamsForLottery.length === 0) return;
 
-    setAnimationStarted(true);
     setIsRunning(true);
-    skipAnimationRef.current = false; // Reset skip flag
-
     try {
-      // Step 1: Run the lottery calculation FIRST (no delay) to get all results
-      // Results are returned in order: [worst pick, ..., Pick #2, Pick #1 (winner)]
-      const results = await runNBALottery(
-        teamsForLottery,
-        null, // No callback during calculation
-        0    // No delay - calculate instantly
-      );
-
-      // Step 2: Store the full results for skip functionality
+      // Results are ordered worst pick first, winner (Pick #1) last
+      const results = await runNBALottery(teamsForLottery, null, 0);
       setFullLotteryResults(results);
-      
-      // Step 3: Clear selections initially - don't show results section until animation completes or is skipped
       setSelections([]);
-      setShowResults(false); // Keep results section hidden during animation
-
-      // Step 3: Animate through the results sequentially
-      // Results array is: [Pick #6, Pick #5, Pick #4, Pick #3, Pick #2, Pick #1]
-      // We want to animate them in this order (worst first, winner last)
-      const animationDuration = 1200; // Animation duration in ms (matches CSS animation)
-      const delayBetweenPicks = 150; // Delay between each pick animation start (matches CSS delay)
-      const staticDelayBetweenPicks = 300; // Static delay between picks (after avatar finishes rolling in)
-      const lastPickDelay = 1000; // 2 second delay before the last pick
-      
-      for (let i = 0; i < results.length; i++) {
-        // Check if skip was clicked - if so, break out of the loop
-        if (skipAnimationRef.current) {
-          break;
-        }
-        
-        const selection = results[i];
-        const animationDelay = i * delayBetweenPicks;
-        const isLastPick = i === results.length - 1;
-        
-        // If this is the last pick, wait 2 seconds before starting its animation
-        if (isLastPick) {
-          await new Promise(resolve => setTimeout(resolve, lastPickDelay));
-        } else if (i > 0) {
-          // For all picks except the first, wait the static delay before starting the next animation
-          await new Promise(resolve => setTimeout(resolve, staticDelayBetweenPicks));
-        }
-        
-        // Check again after delay - skip might have been clicked during the delay
-        if (skipAnimationRef.current) {
-          break;
-        }
-        
-        // Show all selections up to this point (avatars start rolling in)
-        setSelections(results.slice(0, i + 1));
-        
-        // Wait for the avatar animation to complete before showing/updating the top display
-        // Animation starts at animationDelay and takes animationDuration
-        await new Promise(resolve => setTimeout(resolve, animationDelay + animationDuration));
-        
-        // Check again after animation delay
-        if (skipAnimationRef.current) {
-          break;
-        }
-        
-        // Now show/update the top display after avatar has finished rolling in
-        // This will replace the previous pick's display (if any)
-        setCurrentSelection(selection);
-        
-        // If this is the last selection (Pick #1 - winner), trigger confetti
-        if (isLastPick && selection.pickNumber === 1 && !skipAnimationRef.current) {
-          // Import and trigger confetti
-          const confetti = (await import('canvas-confetti')).default;
-          const duration = 6000; // Doubled from 3000ms to 6000ms
-          const animationEnd = Date.now() + duration;
-          const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 10000 };
-
-          function randomInRange(min, max) {
-            return Math.random() * (max - min) + min;
-          }
-
-          const interval = setInterval(function() {
-            const timeLeft = animationEnd - Date.now();
-
-            if (timeLeft <= 0) {
-              return clearInterval(interval);
-            }
-
-            const particleCount = 50 * (timeLeft / duration);
-            confetti({
-              ...defaults,
-              particleCount,
-              origin: { x: randomInRange(0.1, 0.9), y: Math.random() - 0.2 }
-            });
-          }, 250);
-          
-          // Store the interval so we can clear it if user skips
-          setConfettiInterval(interval);
-        }
-      }
-
-      // Only update results if animation wasn't skipped
-      if (!skipAnimationRef.current) {
-        // Ensure all teams are displayed after animation completes
-        setSelections(results);
-        
-        // Keep the #1 pick (winner) displayed at the top after animation completes
-        const winner = results.find(r => r.pickNumber === 1);
-        if (winner) {
-          setCurrentSelection(winner);
-        }
-        
-        // Animation complete - show final results
-        setShowResults(true);
-      }
+      setShowResults(false);
+      setAnimationStarted(true);
     } catch (err) {
       setError(err.message || 'Lottery failed');
-    } finally {
       setIsRunning(false);
-      // Clear confetti interval when animation completes naturally
-      if (confettiInterval) {
-        clearInterval(confettiInterval);
-        setConfettiInterval(null);
-      }
-      // Don't clear currentSelection - keep #1 pick displayed at top
-      // Don't close animation automatically - wait for user to click exit
     }
-  }, [teamsForLottery, confettiInterval]);
+  }, [teamsForLottery]);
+
+  // Reveal finished on its own: show the results section behind the popup
+  const handleRevealComplete = useCallback(() => {
+    setSelections(fullLotteryResults);
+    setShowResults(true);
+    setIsRunning(false);
+  }, [fullLotteryResults]);
 
   // Handle reset
   const handleReset = useCallback(() => {
@@ -477,75 +361,21 @@ function App() {
     setShowAnimation(false);
     setAnimationStarted(false);
     setSelections([]);
-    setCurrentSelection(null);
     setShowResults(false);
     setError(null);
     setTeamsForLottery([]);
   }, []);
 
-  // Handle cancel animation
-  const handleCancelAnimation = useCallback(() => {
-    // Stop any ongoing confetti
-    if (confettiInterval) {
-      clearInterval(confettiInterval);
-      setConfettiInterval(null);
-    }
+  // Skip (or "View Results" after the reveal): close the popup and show every result
+  const handleSkipAnimation = useCallback(() => {
     setIsRunning(false);
     setShowAnimation(false);
     setAnimationStarted(false);
-    setSelections([]);
-    setCurrentSelection(null);
-    setTeamsForLottery([]);
-    setFullLotteryResults([]);
-  }, [confettiInterval]);
-
-  // Handle skip animation - immediately show results
-  const handleSkipAnimation = useCallback(async () => {
-    // Set skip flag to stop the animation loop
-    skipAnimationRef.current = true;
-    
-    // Stop any ongoing confetti immediately
-    if (confettiInterval) {
-      clearInterval(confettiInterval);
-      setConfettiInterval(null);
-    }
-    
-    // Stop the animation loop
-    setIsRunning(false);
-    setShowAnimation(false);
-    setAnimationStarted(false);
-    
-    // Use the full lottery results if available, otherwise calculate them
-    let finalResults = fullLotteryResults.length > 0 ? fullLotteryResults : null;
-    
-    if (!finalResults && teamsForLottery.length > 0) {
-      try {
-        finalResults = await runNBALottery(
-          teamsForLottery,
-          null, // No callback
-          0    // No delay - calculate instantly
-        );
-        setFullLotteryResults(finalResults);
-      } catch (err) {
-        setError(err.message || 'Lottery failed');
-        return;
-      }
-    }
-    
-    // Set ALL results at once (not incrementally) - only if we have results
-    if (finalResults && finalResults.length > 0) {
-      setSelections(finalResults);
-      
-      // Set the winner as current selection
-      const winner = finalResults.find(r => r.pickNumber === 1);
-      if (winner) {
-        setCurrentSelection(winner);
-      }
-      
-      // Show results section immediately
+    if (fullLotteryResults.length > 0) {
+      setSelections(fullLotteryResults);
       setShowResults(true);
     }
-  }, [teamsForLottery, fullLotteryResults, confettiInterval, runNBALottery]);
+  }, [fullLotteryResults]);
 
   // Handle error dismiss
   const handleErrorDismiss = useCallback(() => {
@@ -765,7 +595,7 @@ function App() {
             sx: {
               background: 'transparent',
               boxShadow: 'none',
-              maxHeight: '80vh',
+              maxHeight: '95vh',
               position: 'relative',
             },
           }}
@@ -777,11 +607,10 @@ function App() {
           }}
         >
           <SelectionAnimation
-            selection={currentSelection}
-            selections={selections}
-            totalTeams={teamsForLottery.length}
+            results={fullLotteryResults}
             animationStarted={animationStarted}
             onStart={handleStartAnimation}
+            onComplete={handleRevealComplete}
             onSkip={handleSkipAnimation}
             leagueName={league?.name || 'Fantasy Football'}
           />

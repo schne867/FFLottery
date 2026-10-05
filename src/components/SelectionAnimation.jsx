@@ -1,343 +1,432 @@
-import React from 'react';
-import { Box, Paper, Typography, Button } from '@mui/material';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Box, Paper, Typography, Button, useMediaQuery } from '@mui/material';
 import { PlayArrow, SkipNext } from '@mui/icons-material';
+import confetti from 'canvas-confetti';
 import { TeamAvatar } from './TeamAvatar';
+import { BallMachine } from './BallMachine';
+import { useSettings } from '../settings/SettingsContext';
+import { useRevealSequence } from '../hooks/useRevealSequence';
+import { PHASES } from '../utils/revealTiming';
 
-/**
- * Helper function to get position label
- * position = display position (1 = worst, N = winner)
- * pickNumber = actual pick number (1 = winner, N = worst) - optional, calculated if not provided
- */
-function getPositionLabel(position, total, pickNumber = null) {
-  // If pickNumber is provided, use it directly
-  if (pickNumber !== null && pickNumber !== undefined) {
-    if (pickNumber === 1) return '🏆 Pick #1';
-    return `Pick #${pickNumber}`;
-  }
-  
-  // Otherwise calculate from display position (backward compatibility)
-  if (position === total) return '🏆 Pick #1';
-  if (position === 1) return `Pick #${total}`;
-  const calculatedPickNumber = total - position + 1;
-  return `Pick #${calculatedPickNumber}`;
+const TEXT_OUTLINE = `
+  -2px -2px 0 #000,
+  2px -2px 0 #000,
+  -2px 2px 0 #000,
+  2px 2px 0 #000,
+  0 0 4px #000,
+  0 0 4px #000
+`;
+
+const PAPER_BACKGROUND_SX = {
+  backgroundImage: 'url(/istockphoto-2167499398-612x612.jpg)',
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundRepeat: 'no-repeat',
+  color: 'white',
+  position: 'relative',
+  overflow: 'hidden',
+  '&::before': {
+    content: '""',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.3)',
+    zIndex: 0,
+  },
+};
+
+const CONFETTI_MS = 6000;
+
+function getPickLabel(pickNumber) {
+  return pickNumber === 1 ? '🏆 Pick #1' : `Pick #${pickNumber}`;
 }
 
-/**
- * SelectionAnimation component for displaying lottery animation
- * @param {Object} props
- * @param {Object} props.selection - Current selection object (null if not started)
- * @param {Array} props.selections - Array of all selections made so far (worst pick first, winner last)
- * @param {number} props.totalTeams - Total number of teams
- * @param {boolean} props.animationStarted - Whether the animation has started
- * @param {Function} props.onStart - Callback to start the animation
- * @param {Function} props.onClose - Callback to close/cancel the animation
- * @param {Function} props.onSkip - Callback to skip the animation and show results
- * @param {string} props.leagueName - Name of the league from Sleeper API
- */
-export function SelectionAnimation({ selection, selections = [], totalTeams, animationStarted, onStart, onClose, onSkip, leagueName = 'Fantasy Football' }) {
-  // Show start button if animation hasn't started
-  if (!animationStarted) {
-    return (
-      <Box sx={{ textAlign: 'center', p: 4, position: 'relative' }}>
-        <Paper
-          elevation={8}
-          sx={{
-            p: 6,
-            backgroundImage: 'url(/istockphoto-2167499398-612x612.jpg)',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            color: 'white',
-            minHeight: '50vh',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            position: 'relative',
-            overflow: 'hidden',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0, 0, 0, 0.3)',
-              zIndex: 0,
-            },
-          }}
-        >
-          <Typography 
-            variant="h3" 
-            sx={{ 
-              fontWeight: 'bold', 
-              mb: 6,
-              color: 'white !important',
-              position: 'relative',
-              zIndex: 1,
-              textShadow: `
-                -2px -2px 0 #000,
-                2px -2px 0 #000,
-                -2px 2px 0 #000,
-                2px 2px 0 #000,
-                0 0 4px #000,
-                0 0 4px #000
-              `,
-            }}
-          >
-            The {leagueName} Draft Lottery
-          </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            onClick={onStart}
-            startIcon={<PlayArrow />}
-            sx={{
-              px: 6,
-              py: 2,
-              fontSize: '1.2rem',
-              bgcolor: 'white',
-              color: '#667eea',
-              position: 'relative',
-              zIndex: 1,
-              '&:hover': {
-                bgcolor: 'rgba(255, 255, 255, 0.9)',
-              },
-            }}
-          >
-            Start Lottery
-          </Button>
-        </Paper>
-      </Box>
-    );
+function getHeadline(phase, selection, remainingCount) {
+  switch (phase) {
+    case PHASES.MIXING:
+    case PHASES.EJECTING:
+      return remainingCount === 2 ? 'Two teams left…' : `Drawing Pick #${selection.pickNumber}…`;
+    case PHASES.GOLDEN:
+      return 'And the #1 pick goes to…';
+    case PHASES.REVEALING:
+      return getPickLabel(selection.pickNumber);
+    case PHASES.PAUSING:
+      return `Up next: Pick #${selection.pickNumber - 1}`;
+    default:
+      return '🏆 The draft order is set!';
   }
+}
 
-  // Sort selections by pickNumber descending to ensure worst pick (highest pickNumber) is first
-  // This ensures the animation order is always correct regardless of how the array was built
-  const allSelections = selections.length > 0 
-    ? [...selections].sort((a, b) => b.pickNumber - a.pickNumber) // Sort descending: Pick #6 first, Pick #1 last
-    : [];
+// More teams = smaller draft-board cards so the row fits
+function getBoardSizes(numTeams) {
+  if (numTeams <= 6) return { avatarSize: 56, cardWidth: 110, gap: 12 };
+  if (numTeams <= 10) return { avatarSize: 48, cardWidth: 96, gap: 10 };
+  if (numTeams <= 14) return { avatarSize: 40, cardWidth: 84, gap: 8 };
+  return { avatarSize: 34, cardWidth: 74, gap: 6 };
+}
 
-  // Dynamically calculate avatar size and card dimensions based on number of teams
-  // More teams = smaller avatars to fit on screen, fewer teams = larger avatars
-  const getDynamicSizes = (numTeams) => {
-    if (numTeams <= 6) {
-      return { avatarSize: 100, cardWidth: 140, gap: 16 };
-    } else if (numTeams <= 10) {
-      return { avatarSize: 80, cardWidth: 120, gap: 12 };
-    } else if (numTeams <= 14) {
-      return { avatarSize: 60, cardWidth: 100, gap: 10 };
-    } else {
-      return { avatarSize: 50, cardWidth: 85, gap: 8 };
-    }
-  };
+function useWinnerConfetti(active) {
+  useEffect(() => {
+    if (!active) return undefined;
+    const end = Date.now() + CONFETTI_MS;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 10000 };
+    const interval = setInterval(() => {
+      const timeLeft = end - Date.now();
+      if (timeLeft <= 0) {
+        clearInterval(interval);
+        return;
+      }
+      confetti({
+        ...defaults,
+        particleCount: 50 * (timeLeft / CONFETTI_MS),
+        origin: { x: 0.1 + Math.random() * 0.8, y: Math.random() - 0.2 },
+      });
+    }, 250);
+    return () => {
+      clearInterval(interval);
+      confetti.reset();
+    };
+  }, [active]);
+}
 
-  const { avatarSize, cardWidth, gap } = getDynamicSizes(totalTeams);
-  const spacing = cardWidth + gap;
-
+function StartScreen({ leagueName, onStart }) {
   return (
-    <Box sx={{ textAlign: 'center', p: 3, position: 'relative' }}>
+    <Box sx={{ textAlign: 'center', p: 4, position: 'relative' }}>
       <Paper
         elevation={8}
         sx={{
-          p: 5,
-          backgroundImage: 'url(/istockphoto-2167499398-612x612.jpg)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          color: 'white',
-          minHeight: '60vh',
+          ...PAPER_BACKGROUND_SX,
+          p: 6,
+          minHeight: '50vh',
           display: 'flex',
           flexDirection: 'column',
-          position: 'relative',
-          overflow: 'hidden',
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.3)',
-            zIndex: 0,
-          },
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
       >
-        {/* Current selection display - always present to reserve space */}
-        <Box sx={{ mb: 4, position: 'relative', zIndex: 1, minHeight: 120 }}>
-          {selection ? (
-            <>
-              <Typography 
-                variant="h3" 
-                gutterBottom
-                sx={{
-                  color: 'white',
-                  textShadow: `
-                    -2px -2px 0 #000,
-                    2px -2px 0 #000,
-                    -2px 2px 0 #000,
-                    2px 2px 0 #000,
-                    0 0 4px #000,
-                    0 0 4px #000
-                  `,
-                }}
-              >
-                {getPositionLabel(selection.position, totalTeams, selection.pickNumber)}
-              </Typography>
-              <Typography 
-                variant="h2" 
-                sx={{ 
-                  fontWeight: 'bold', 
-                  mt: 2,
-                  color: 'white',
-                  textShadow: `
-                    -2px -2px 0 #000,
-                    2px -2px 0 #000,
-                    -2px 2px 0 #000,
-                    2px 2px 0 #000,
-                    0 0 4px #000,
-                    0 0 4px #000
-                  `,
-                }}
-              >
-                {selection.teamName}
-              </Typography>
-            </>
-          ) : null}
-        </Box>
-
-        {/* All teams rolling in from left to right */}
-        <Box 
-          sx={{ 
-            display: 'flex',
-            flexDirection: 'row-reverse',
-            flexWrap: 'wrap',
-            justifyContent: 'flex-start',
-            alignItems: 'flex-start',
-            alignContent: 'flex-start',
-            gap: `${gap}px`,
-            mt: 4,
-            minHeight: 300,
-            pb: 2,
-            px: 2,
-            width: '100%',
+        <Typography
+          variant="h3"
+          sx={{
+            fontWeight: 'bold',
+            mb: 6,
+            color: 'white !important',
             position: 'relative',
             zIndex: 1,
+            textShadow: TEXT_OUTLINE,
           }}
         >
-          {allSelections.map((sel, index) => {
-            // Animation delay: first item (index 0) animates first, last item animates last
-            // Array is already sorted: [Pick #6, Pick #5, Pick #4, Pick #3, Pick #2, Pick #1]
-            // We want Pick #6 (worst) at the rightmost position, each subsequent pick to the left
-            // When wrapping, new items should start at the right edge of the new row
-            const animationDelay = index * 0.15;
-            
-            return (
-            <Box
-              key={`${sel.userId}-${sel.pickNumber}`}
-              sx={{
-                animation: 'rollInFromLeft 1.2s ease-out forwards',
-                animationDelay: `${animationDelay}s`,
-                opacity: 0,
-                flexShrink: 0,
-                width: cardWidth,
-                '@keyframes rollInFromLeft': {
-                  '0%': {
-                    opacity: 0,
-                    transform: 'translateX(-100vw) rotate(-180deg) scale(0.3)',
-                  },
-                  '100%': {
-                    opacity: 1,
-                    transform: 'translateX(0) rotate(0deg) scale(1)',
-                  },
-                },
-              }}
-            >
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 1,
-                  p: 2,
-                  borderRadius: 2,
-                  bgcolor: sel.pickNumber === 1 ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                  border: sel.pickNumber === 1 ? '2px solid gold' : 'none',
-                  width: cardWidth,
-                  flexShrink: 0,
-                }}
-              >
-                <TeamAvatar
-                  avatar={sel.avatar}
-                  teamName={sel.teamName}
-                  size={avatarSize}
-                />
-                <Typography 
-                  variant={totalTeams <= 6 ? "h6" : totalTeams <= 10 ? "subtitle1" : "body2"}
-                  sx={{ 
-                    color: 'white', 
-                    fontWeight: sel.pickNumber === 1 ? 'bold' : 'normal',
-                    textAlign: 'center',
-                    maxWidth: cardWidth - 16,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    fontSize: totalTeams <= 6 ? '1rem' : totalTeams <= 10 ? '0.9rem' : '0.75rem',
-                  }}
-                >
-                  {sel.teamName}
-                </Typography>
-                <Typography 
-                  variant={totalTeams <= 6 ? "h5" : totalTeams <= 10 ? "h6" : "subtitle1"}
-                  sx={{ 
-                    color: sel.pickNumber === 1 ? 'gold' : 'rgba(255, 255, 255, 0.9)', 
-                    fontWeight: 'bold',
-                    fontSize: totalTeams <= 6 ? '1.5rem' : totalTeams <= 10 ? '1.2rem' : '1rem',
-                  }}
-                >
-                  {getPositionLabel(sel.position, totalTeams, sel.pickNumber)}
-                </Typography>
-              </Box>
-            </Box>
-            );
-          })}
-        </Box>
-
-        {/* Skip button - bottom center of animation window */}
-        {animationStarted && (
-          <Box 
-            sx={{ 
-              mt: 'auto',
-              pt: 4,
-              display: 'flex',
-              justifyContent: 'center',
-              position: 'relative',
-              zIndex: 1,
-            }}
-          >
-            <Button
-              variant="outlined"
-              onClick={onSkip}
-              startIcon={<SkipNext />}
-              sx={{
-                px: 4,
-                py: 1.5,
-                fontSize: '1rem',
-                borderColor: 'rgba(255, 255, 255, 0.5)',
-                color: 'white',
-                bgcolor: 'rgba(0, 0, 0, 0.3)',
-                '&:hover': {
-                  borderColor: 'rgba(255, 255, 255, 0.8)',
-                  bgcolor: 'rgba(0, 0, 0, 0.5)',
-                },
-              }}
-            >
-              Skip to Results
-            </Button>
-          </Box>
-        )}
-
+          The {leagueName} Draft Lottery
+        </Typography>
+        <Button
+          variant="contained"
+          size="large"
+          onClick={onStart}
+          startIcon={<PlayArrow />}
+          sx={{
+            px: 6,
+            py: 2,
+            fontSize: '1.2rem',
+            bgcolor: 'white',
+            color: '#667eea',
+            position: 'relative',
+            zIndex: 1,
+            '&:hover': {
+              bgcolor: 'rgba(255, 255, 255, 0.9)',
+            },
+          }}
+        >
+          Start Lottery
+        </Button>
       </Paper>
     </Box>
   );
 }
 
+// The drawn ball pops up over the drum and its shell splits open to show the team
+function RevealedBall({ selection, sizePx }) {
+  const isWinner = selection.pickNumber === 1;
+  const shellColor = isWinner ? 'gold' : 'white';
+  const halfShell = {
+    position: 'absolute',
+    left: 0,
+    width: '100%',
+    height: '50%',
+    bgcolor: shellColor,
+    boxShadow: 'inset 0 0 18px rgba(0, 0, 0, 0.25)',
+  };
+
+  return (
+    <Box
+      data-testid="revealed-ball"
+      sx={{
+        position: 'relative',
+        width: sizePx,
+        height: sizePx,
+        animation: 'revealPop 0.4s ease-out both',
+        '@keyframes revealPop': {
+          '0%': { transform: 'scale(0.2)', opacity: 0 },
+          '100%': { transform: 'scale(1)', opacity: 1 },
+        },
+      }}
+    >
+      <Box
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: '50%',
+          bgcolor: 'rgba(0, 0, 0, 0.8)',
+          border: `4px solid ${shellColor}`,
+          boxShadow: isWinner ? '0 0 40px 12px rgba(255, 215, 0, 0.7)' : '0 0 24px rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 0.5,
+          p: 2,
+        }}
+      >
+        <TeamAvatar avatar={selection.avatar} teamName={selection.teamName} size={Math.round(sizePx * 0.32)} />
+        <Typography sx={{ color: shellColor, fontWeight: 'bold', fontSize: sizePx > 180 ? '1.4rem' : '1.1rem' }}>
+          {getPickLabel(selection.pickNumber)}
+        </Typography>
+        <Typography
+          sx={{
+            color: 'white',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            lineHeight: 1.2,
+            maxWidth: sizePx * 0.8,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontSize: sizePx > 180 ? '1.1rem' : '0.9rem',
+          }}
+        >
+          {selection.teamName}
+        </Typography>
+      </Box>
+      <Box
+        sx={{
+          ...halfShell,
+          top: 0,
+          borderRadius: `${sizePx / 2}px ${sizePx / 2}px 0 0`,
+          animation: 'shellTop 0.8s ease-in 0.4s both',
+          '@keyframes shellTop': {
+            '0%': { transform: 'translateY(0) rotate(0deg)', opacity: 1 },
+            '100%': { transform: 'translateY(-90%) rotate(-25deg)', opacity: 0 },
+          },
+        }}
+      />
+      <Box
+        sx={{
+          ...halfShell,
+          bottom: 0,
+          borderRadius: `0 0 ${sizePx / 2}px ${sizePx / 2}px`,
+          animation: 'shellBottom 0.8s ease-in 0.4s both',
+          '@keyframes shellBottom': {
+            '0%': { transform: 'translateY(0) rotate(0deg)', opacity: 1 },
+            '100%': { transform: 'translateY(90%) rotate(20deg)', opacity: 0 },
+          },
+        }}
+      />
+    </Box>
+  );
+}
+
+// Revealed picks, filling in from the right (last pick) toward #1
+function DraftBoard({ selections, totalTeams }) {
+  const { avatarSize, cardWidth, gap } = getBoardSizes(totalTeams);
+
+  return (
+    <Box
+      data-testid="draft-board"
+      sx={{
+        display: 'flex',
+        flexDirection: 'row-reverse',
+        flexWrap: 'wrap',
+        justifyContent: 'flex-start',
+        alignContent: 'flex-start',
+        gap: `${gap}px`,
+        width: '100%',
+        minHeight: avatarSize + 80,
+        px: 2,
+        position: 'relative',
+        zIndex: 1,
+      }}
+    >
+      {selections.map(sel => {
+        const isWinner = sel.pickNumber === 1;
+        return (
+          <Box
+            key={`${sel.userId}-${sel.pickNumber}`}
+            sx={{
+              width: cardWidth,
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 0.5,
+              p: 1.5,
+              borderRadius: 2,
+              bgcolor: isWinner ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+              border: isWinner ? '2px solid gold' : 'none',
+              animation: 'boardPop 0.5s ease-out both',
+              '@keyframes boardPop': {
+                '0%': { opacity: 0, transform: 'scale(0.3)' },
+                '100%': { opacity: 1, transform: 'scale(1)' },
+              },
+            }}
+          >
+            <TeamAvatar avatar={sel.avatar} teamName={sel.teamName} size={avatarSize} />
+            <Typography
+              sx={{
+                color: 'white',
+                fontWeight: isWinner ? 'bold' : 'normal',
+                textAlign: 'center',
+                maxWidth: cardWidth - 16,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: totalTeams <= 6 ? '1rem' : totalTeams <= 10 ? '0.9rem' : '0.75rem',
+              }}
+            >
+              {sel.teamName}
+            </Typography>
+            <Typography
+              sx={{
+                color: isWinner ? 'gold' : 'rgba(255, 255, 255, 0.9)',
+                fontWeight: 'bold',
+                fontSize: totalTeams <= 6 ? '1.25rem' : '1rem',
+              }}
+            >
+              {getPickLabel(sel.pickNumber)}
+            </Typography>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
+function RevealStage({ results, onComplete, onSkip, leagueName }) {
+  const { settings } = useSettings();
+  const { pickIndex, phase, revealedCount, isComplete } = useRevealSequence(results.length, settings);
+  const isSmallScreen = useMediaQuery('(max-width:600px)');
+  const drumRadiusPx = isSmallScreen ? 80 : 120;
+
+  const current = results[pickIndex];
+  const isWinnerPick = current.pickNumber === 1;
+  const ballIsOut = phase === PHASES.REVEALING || phase === PHASES.PAUSING || isComplete;
+  const showReveal = phase === PHASES.REVEALING || isComplete;
+
+  // Call onComplete exactly once, even if the parent passes a new callback later
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  useEffect(() => {
+    if (isComplete) onCompleteRef.current?.();
+  }, [isComplete]);
+
+  useWinnerConfetti(isWinnerPick && showReveal);
+
+  const hiddenIds = results.slice(0, pickIndex).map(sel => sel.userId);
+  if (ballIsOut) hiddenIds.push(current.userId);
+
+  return (
+    <Box sx={{ textAlign: 'center', p: { xs: 1, md: 3 }, position: 'relative' }}>
+      <Paper
+        elevation={8}
+        sx={{
+          ...PAPER_BACKGROUND_SX,
+          p: { xs: 2, md: 4 },
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{ color: 'white', fontWeight: 'bold', position: 'relative', zIndex: 1, textShadow: TEXT_OUTLINE }}
+        >
+          The {leagueName} Draft Lottery
+        </Typography>
+        <Typography
+          data-testid="reveal-headline"
+          variant="h3"
+          sx={{
+            color: 'white',
+            fontWeight: 'bold',
+            mt: 1,
+            minHeight: { xs: 40, md: 56 },
+            fontSize: { xs: '1.75rem', md: '3rem' },
+            position: 'relative',
+            zIndex: 1,
+            textShadow: TEXT_OUTLINE,
+          }}
+        >
+          {getHeadline(phase, current, results.length - pickIndex)}
+        </Typography>
+
+        <Box sx={{ position: 'relative', zIndex: 1, my: 2, maxWidth: '100%' }}>
+          <BallMachine
+            teams={results}
+            jetOn={phase === PHASES.MIXING || phase === PHASES.EJECTING}
+            ejectId={phase === PHASES.EJECTING ? current.userId : null}
+            riseId={isWinnerPick ? current.userId : null}
+            hiddenIds={hiddenIds}
+            drumRadiusPx={drumRadiusPx}
+          >
+            {showReveal && <RevealedBall key={current.pickNumber} selection={current} sizePx={drumRadiusPx * 1.7} />}
+          </BallMachine>
+        </Box>
+
+        <DraftBoard selections={results.slice(0, revealedCount)} totalTeams={results.length} />
+
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={onSkip}
+            startIcon={<SkipNext />}
+            sx={{
+              px: 4,
+              py: 1.5,
+              fontSize: '1rem',
+              borderColor: 'rgba(255, 255, 255, 0.5)',
+              color: 'white',
+              bgcolor: 'rgba(0, 0, 0, 0.3)',
+              '&:hover': {
+                borderColor: 'rgba(255, 255, 255, 0.8)',
+                bgcolor: 'rgba(0, 0, 0, 0.5)',
+              },
+            }}
+          >
+            {isComplete ? 'View Results' : 'Skip to Results'}
+          </Button>
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
+
+/**
+ * Lottery reveal popup: a start screen, then the ball machine reveal.
+ * @param {Object} props
+ * @param {Array} props.results - Full lottery results from runNBALottery (worst pick first, winner last)
+ * @param {boolean} props.animationStarted - Whether the reveal has started
+ * @param {Function} props.onStart - Start the lottery
+ * @param {Function} props.onComplete - Called once when the reveal finishes on its own
+ * @param {Function} props.onSkip - Skip to (or, after completion, view) the results
+ * @param {string} props.leagueName - Name of the league from Sleeper API
+ */
+export function SelectionAnimation({ results = [], animationStarted, onStart, onComplete, onSkip, leagueName = 'Fantasy Football' }) {
+  // Worst pick first so the reveal ends on #1, whatever order the array arrives in
+  const orderedResults = useMemo(() => [...results].sort((a, b) => b.pickNumber - a.pickNumber), [results]);
+
+  if (!animationStarted) {
+    return <StartScreen leagueName={leagueName} onStart={onStart} />;
+  }
+  // App sets the results before starting the reveal, so this is only a safety net
+  if (orderedResults.length === 0) return null;
+
+  return <RevealStage results={orderedResults} onComplete={onComplete} onSkip={onSkip} leagueName={leagueName} />;
+}
