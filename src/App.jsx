@@ -343,8 +343,11 @@ function App() {
       setShowResults(false);
       setAnimationStarted(true);
     } catch (err) {
+      // Close the popup so the error alert behind it is visible
       setError(err.message || 'Lottery failed');
       setIsRunning(false);
+      setShowAnimation(false);
+      setAnimationStarted(false);
     }
   }, [teamsForLottery]);
 
