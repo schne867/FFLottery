@@ -1,13 +1,16 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { SettingsProvider } from './settings/SettingsContext';
 import './index.css';
 
 try {
   const root = ReactDOM.createRoot(document.getElementById('root'));
   root.render(
     <React.StrictMode>
-      <App />
+      <SettingsProvider>
+        <App />
+      </SettingsProvider>
     </React.StrictMode>
   );
 } catch (error) {
