@@ -6,6 +6,16 @@ import { EJECT_SECONDS, GOLDEN_SECONDS } from '../utils/revealTiming';
 
 // Normalized area around the drum (radius 1) that also fits the chute and the golden ball's rise point
 const VIEW = { minX: -1.15, minY: -1.5, width: 3.3, height: 2.65 };
+const MIN_DRUM_RADIUS_PX = 40;
+const MAX_DRUM_RADIUS_PX = 320;
+
+/**
+ * Largest drum radius (px) whose machine drawing fits in the given space.
+ */
+export function fitDrumRadius(availableWidth, availableHeight) {
+  const radius = Math.min(availableWidth / VIEW.width, availableHeight / VIEW.height);
+  return Math.min(MAX_DRUM_RADIUS_PX, Math.max(MIN_DRUM_RADIUS_PX, radius));
+}
 
 /**
  * Glass lottery drum with one avatar ball per team, animated by drumPhysics.
@@ -77,26 +87,33 @@ export function BallMachine({ teams, jetOn, ejectId = null, riseId = null, hidde
             <stop offset="0%" stopColor="rgba(255, 255, 255, 0.45)" />
             <stop offset="100%" stopColor="rgba(255, 255, 255, 0.08)" />
           </radialGradient>
+          {/* Everything except the drum's circle, so the chute never shows through the glass */}
+          <mask id="drum-outside" maskUnits="userSpaceOnUse" x={VIEW.minX} y={VIEW.minY} width={VIEW.width} height={VIEW.height}>
+            <rect x={VIEW.minX} y={VIEW.minY} width={VIEW.width} height={VIEW.height} fill="white" />
+            <circle cx="0" cy="0" r="1" fill="black" />
+          </mask>
         </defs>
         {/* Chute: a tube from the drum mouth down to the right */}
-        <line
-          x1={CHUTE.mouth.x - 0.1}
-          y1={CHUTE.mouth.y}
-          x2={CHUTE.end.x}
-          y2={CHUTE.end.y}
-          stroke="rgba(255, 255, 255, 0.7)"
-          strokeWidth={drum.ballRadius * 2 + 0.08}
-          strokeLinecap="round"
-        />
-        <line
-          x1={CHUTE.mouth.x - 0.1}
-          y1={CHUTE.mouth.y}
-          x2={CHUTE.end.x}
-          y2={CHUTE.end.y}
-          stroke="rgba(30, 30, 60, 0.55)"
-          strokeWidth={drum.ballRadius * 2 + 0.02}
-          strokeLinecap="round"
-        />
+        <g data-testid="drum-chute" mask="url(#drum-outside)">
+          <line
+            x1={CHUTE.mouth.x - 0.1}
+            y1={CHUTE.mouth.y}
+            x2={CHUTE.end.x}
+            y2={CHUTE.end.y}
+            stroke="rgba(255, 255, 255, 0.7)"
+            strokeWidth={drum.ballRadius * 2 + 0.08}
+            strokeLinecap="round"
+          />
+          <line
+            x1={CHUTE.mouth.x - 0.1}
+            y1={CHUTE.mouth.y}
+            x2={CHUTE.end.x}
+            y2={CHUTE.end.y}
+            stroke="rgba(30, 30, 60, 0.55)"
+            strokeWidth={drum.ballRadius * 2 + 0.02}
+            strokeLinecap="round"
+          />
+        </g>
         {/* Stand */}
         <path d="M -0.45 0.97 L -0.6 1.12 L 0.6 1.12 L 0.45 0.97 Z" fill="rgba(0, 0, 0, 0.35)" />
         {/* Glass drum */}

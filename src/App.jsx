@@ -591,14 +591,18 @@ function App() {
         {/* Lottery Animation - Popup Modal */}
         <Dialog
           open={showAnimation}
-          maxWidth="lg"
-          fullWidth
+          maxWidth={false}
           onClose={() => {}} // Disable backdrop click closing - only exit button can close
           PaperProps={{
+            // Nearly full-window so the ball machine can be the focus
             sx: {
               background: 'transparent',
               boxShadow: 'none',
-              maxHeight: '95vh',
+              width: '96vw',
+              maxWidth: 1600,
+              height: '94vh',
+              maxHeight: '94vh',
+              m: 0,
               position: 'relative',
             },
           }}
