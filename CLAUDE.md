@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # Start development server (http://localhost:5173)
 npm run build    # Build for production
 npm run preview  # Preview production build
+npm test         # Run unit tests (Vitest)
 ```
 
 ## Architecture Overview
@@ -20,14 +21,14 @@ This is a React/Vite application for running weighted lottery selections for fan
 2. Teams are sorted by record (worst to best) and assigned to lottery slots
 3. Each slot has a combination value determining lottery odds
 4. Running the lottery uses Plackett-Luce model (sampling without replacement)
-5. Results animate from worst pick to winner for dramatic effect
+5. Results are revealed by a ping-pong ball machine, worst pick first, ending with a golden #1 ball
 
 ### Key Modules
 
 **`src/App.jsx`** - Main application state and UI orchestration. Manages:
 - DnD context for swapping teams between lottery slots and playoff positions
 - Lottery slot system (slots hold combinations, teams are assigned to slots)
-- Animation state machine for lottery reveal sequence
+- Opening the lottery popup and handing it the precomputed results
 
 **`src/services/sleeperApi.js`** - Sleeper API integration:
 - Fetches league info, users, rosters, matchups, drafts
@@ -46,10 +47,22 @@ This is a React/Vite application for running weighted lottery selections for fan
 - Predefined combination distributions (NBA 6/12/14 teams, Equal, Linear, etc.)
 - `POINTS_AGAINST.ENABLED` toggle for expensive matchup calculations
 
+**`src/settings/`** - User settings:
+- `settingsSchema.js` - Registry of settings (key, label, group, range, default). Add a setting by adding one entry; the dialog and persistence pick it up
+- `SettingsContext.jsx` - `SettingsProvider` / `useSettings()`; persists to `localStorage` (`ffLottery.settings`)
+
+**`src/utils/revealTiming.js`** - Reveal phases (mixing → ejecting → revealing → pausing; golden → revealing for #1) and durations
+
+**`src/utils/drumPhysics.js`** - Pure, normalized-coordinate physics for the ball machine drum (gravity, air jet, collisions, eject/rise scripts)
+
+**`src/hooks/useRevealSequence.js`** - Timer-driven walk through the reveal steps
+
 ### Component Architecture
 
 - `DraggableAndDroppableTeamCard` / `DroppablePlayoffTeam` - DnD components for team placement
-- `SelectionAnimation` - Full-screen lottery reveal with confetti
+- `SelectionAnimation` - Lottery popup: start screen, then the ball machine reveal (headline, opened-ball overlay, draft board, confetti on #1)
+- `BallMachine` - Glass drum + chute SVG with one avatar ball per team, animated via `drumPhysics`
+- `SettingsDialog` - Gear button + settings dialog generated from the settings registry
 - `LotteryResults` - Final draft order display
 - `TeamNameWithAvatar` / `TeamAvatar` - Consistent team display components
 
