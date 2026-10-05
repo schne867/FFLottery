@@ -130,6 +130,21 @@ describe('SelectionAnimation', () => {
     expect(confetti.mock.calls.length).toBe(callsAtClose);
   });
 
+  it('uses compact draft-board cards for big lotteries, with the team name on hover', () => {
+    const bigLottery = Array.from({ length: 14 }, (_, i) => ({
+      userId: `t${i}`,
+      teamName: `Team Number ${i + 1}`,
+      avatar: null,
+      pickNumber: 14 - i,
+      position: i + 1,
+    }));
+    renderAnimation({ results: bigLottery });
+    advanceTime(3000);
+    const board = screen.getByTestId('draft-board');
+    expect(within(board).getByTitle('Team Number 1')).toHaveTextContent('#14');
+    expect(within(board).queryByText('Team Number 1')).not.toBeInTheDocument();
+  });
+
   it('restarts from the worst pick when the lottery is run again', () => {
     const { rerenderWith } = renderAnimation();
     advanceTime(4000);

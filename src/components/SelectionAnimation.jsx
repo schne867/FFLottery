@@ -59,12 +59,15 @@ function getHeadline(phase, selection, remainingCount) {
   }
 }
 
-// More teams = smaller draft-board cards so the row fits
+// Above this many teams, board cards show only the pick number (team name on hover) so one row fits
+const COMPACT_BOARD_THRESHOLD = 12;
+
+// More teams = smaller draft-board cards so the single row fits
 function getBoardSizes(numTeams) {
-  if (numTeams <= 6) return { avatarSize: 56, cardWidth: 120, gap: 12 };
-  if (numTeams <= 10) return { avatarSize: 48, cardWidth: 96, gap: 10 };
-  if (numTeams <= 14) return { avatarSize: 40, cardWidth: 84, gap: 8 };
-  return { avatarSize: 34, cardWidth: 74, gap: 6 };
+  if (numTeams <= 6) return { avatarSize: 56, gap: 12, maxColumnPx: 120, nameSize: '1rem', labelSize: '1.1rem' };
+  if (numTeams <= 10) return { avatarSize: 44, gap: 8, maxColumnPx: 110, nameSize: '0.85rem', labelSize: '0.95rem' };
+  if (numTeams <= COMPACT_BOARD_THRESHOLD) return { avatarSize: 38, gap: 6, maxColumnPx: 110, nameSize: '0.75rem', labelSize: '0.85rem' };
+  return { avatarSize: 32, gap: 4, maxColumnPx: 90, nameSize: '0.75rem', labelSize: '0.8rem' };
 }
 
 function useWinnerConfetti(active) {
@@ -237,23 +240,22 @@ function RevealedBall({ selection, sizePx, holdSeconds }) {
   );
 }
 
-// Revealed picks, filling in from the right (last pick) toward #1
+// One slot per pick in a single row (#1 on the left), filling in from the last pick on the right
 function DraftBoard({ selections, totalTeams }) {
-  const { avatarSize, cardWidth, gap } = getBoardSizes(totalTeams);
+  const { avatarSize, gap, maxColumnPx, nameSize, labelSize } = getBoardSizes(totalTeams);
+  const isCompact = totalTeams > COMPACT_BOARD_THRESHOLD;
 
   return (
     <Box
       data-testid="draft-board"
       sx={{
-        display: 'flex',
-        flexDirection: 'row-reverse',
-        flexWrap: 'wrap',
+        display: 'grid',
+        gridTemplateColumns: `repeat(${totalTeams}, minmax(0, ${maxColumnPx}px))`,
         justifyContent: 'center',
-        alignContent: 'flex-start',
         gap: `${gap}px`,
         width: '100%',
-        minHeight: avatarSize + 80,
-        px: 2,
+        minHeight: avatarSize + (isCompact ? 40 : 64),
+        px: { xs: 0, md: 1 },
         position: 'relative',
         zIndex: 1,
       }}
@@ -263,14 +265,17 @@ function DraftBoard({ selections, totalTeams }) {
         return (
           <Box
             key={`${sel.userId}-${sel.pickNumber}`}
+            title={isCompact ? sel.teamName : undefined}
             sx={{
-              width: cardWidth,
-              flexShrink: 0,
+              gridColumn: sel.pickNumber,
+              gridRow: 1,
+              minWidth: 0,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: 0.5,
-              p: 1.5,
+              py: isCompact ? 0.75 : 1,
+              px: 0.5,
               borderRadius: 2,
               bgcolor: isWinner ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
               border: isWinner ? '2px solid gold' : 'none',
@@ -282,29 +287,31 @@ function DraftBoard({ selections, totalTeams }) {
             }}
           >
             <TeamAvatar avatar={sel.avatar} teamName={sel.teamName} size={avatarSize} />
-            <Typography
-              sx={{
-                color: 'white',
-                fontWeight: isWinner ? 'bold' : 'normal',
-                textAlign: 'center',
-                maxWidth: cardWidth - 16,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontSize: totalTeams <= 6 ? '1rem' : totalTeams <= 10 ? '0.9rem' : '0.75rem',
-              }}
-            >
-              {sel.teamName}
-            </Typography>
+            {!isCompact && (
+              <Typography
+                sx={{
+                  color: 'white',
+                  fontWeight: isWinner ? 'bold' : 'normal',
+                  textAlign: 'center',
+                  maxWidth: '100%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: nameSize,
+                }}
+              >
+                {sel.teamName}
+              </Typography>
+            )}
             <Typography
               sx={{
                 color: isWinner ? 'gold' : 'rgba(255, 255, 255, 0.9)',
                 fontWeight: 'bold',
                 whiteSpace: 'nowrap',
-                fontSize: totalTeams <= 6 ? '1.1rem' : '0.95rem',
+                fontSize: labelSize,
               }}
             >
-              {getPickLabel(sel.pickNumber)}
+              {isCompact ? (isWinner ? '🏆 #1' : `#${sel.pickNumber}`) : getPickLabel(sel.pickNumber)}
             </Typography>
           </Box>
         );
@@ -317,9 +324,10 @@ function RevealStage({ results, onComplete, onSkip, leagueName }) {
   const { settings } = useSettings();
   const { pickIndex, phase, revealedCount, isComplete } = useRevealSequence(results.length, settings);
   const isSmallScreen = useMediaQuery('(max-width:600px)');
-  // Bigger drum when there's vertical room for it without scrolling the popup
+  // Size the drum to the screen height so the whole popup fits without scrolling
   const isTallScreen = useMediaQuery('(min-height:860px)');
-  const drumRadiusPx = isSmallScreen ? 80 : isTallScreen ? 150 : 120;
+  const isShortScreen = useMediaQuery('(max-height:740px)');
+  const drumRadiusPx = isSmallScreen ? 80 : isTallScreen ? 150 : isShortScreen ? 90 : 110;
 
   const current = results[pickIndex];
   const isWinnerPick = current.pickNumber === 1;
@@ -339,12 +347,12 @@ function RevealStage({ results, onComplete, onSkip, leagueName }) {
   if (ballIsOut) hiddenIds.push(current.userId);
 
   return (
-    <Box sx={{ textAlign: 'center', p: { xs: 1, md: 3 }, position: 'relative' }}>
+    <Box sx={{ textAlign: 'center', p: { xs: 0, md: 1 }, position: 'relative' }}>
       <Paper
         elevation={8}
         sx={{
           ...PAPER_BACKGROUND_SX,
-          p: { xs: 2, md: 4 },
+          p: { xs: 2, md: 3 },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -395,7 +403,7 @@ function RevealStage({ results, onComplete, onSkip, leagueName }) {
 
         <DraftBoard selections={results.slice(0, revealedCount)} totalTeams={results.length} />
 
-        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
           <Button
             variant="outlined"
             onClick={onSkip}
