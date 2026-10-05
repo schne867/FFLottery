@@ -61,7 +61,7 @@ function getHeadline(phase, selection, remainingCount) {
 
 // More teams = smaller draft-board cards so the row fits
 function getBoardSizes(numTeams) {
-  if (numTeams <= 6) return { avatarSize: 56, cardWidth: 110, gap: 12 };
+  if (numTeams <= 6) return { avatarSize: 56, cardWidth: 120, gap: 12 };
   if (numTeams <= 10) return { avatarSize: 48, cardWidth: 96, gap: 10 };
   if (numTeams <= 14) return { avatarSize: 40, cardWidth: 84, gap: 8 };
   return { avatarSize: 34, cardWidth: 74, gap: 6 };
@@ -145,8 +145,11 @@ function StartScreen({ leagueName, onStart }) {
 }
 
 // The drawn ball pops up over the drum and its shell splits open to show the team
-function RevealedBall({ selection, sizePx }) {
+function RevealedBall({ selection, sizePx, holdSeconds }) {
   const isWinner = selection.pickNumber === 1;
+  // Fit the pop + split inside short reveal holds so the team is always readable before it leaves
+  const popSeconds = Math.min(0.4, holdSeconds * 0.25);
+  const splitSeconds = Math.min(0.8, holdSeconds * 0.35);
   const shellColor = isWinner ? 'gold' : 'white';
   const halfShell = {
     position: 'absolute',
@@ -164,7 +167,7 @@ function RevealedBall({ selection, sizePx }) {
         position: 'relative',
         width: sizePx,
         height: sizePx,
-        animation: 'revealPop 0.4s ease-out both',
+        animation: `revealPop ${popSeconds}s ease-out both`,
         '@keyframes revealPop': {
           '0%': { transform: 'scale(0.2)', opacity: 0 },
           '100%': { transform: 'scale(1)', opacity: 1 },
@@ -211,7 +214,7 @@ function RevealedBall({ selection, sizePx }) {
           ...halfShell,
           top: 0,
           borderRadius: `${sizePx / 2}px ${sizePx / 2}px 0 0`,
-          animation: 'shellTop 0.8s ease-in 0.4s both',
+          animation: `shellTop ${splitSeconds}s ease-in ${popSeconds}s both`,
           '@keyframes shellTop': {
             '0%': { transform: 'translateY(0) rotate(0deg)', opacity: 1 },
             '100%': { transform: 'translateY(-90%) rotate(-25deg)', opacity: 0 },
@@ -223,7 +226,7 @@ function RevealedBall({ selection, sizePx }) {
           ...halfShell,
           bottom: 0,
           borderRadius: `0 0 ${sizePx / 2}px ${sizePx / 2}px`,
-          animation: 'shellBottom 0.8s ease-in 0.4s both',
+          animation: `shellBottom ${splitSeconds}s ease-in ${popSeconds}s both`,
           '@keyframes shellBottom': {
             '0%': { transform: 'translateY(0) rotate(0deg)', opacity: 1 },
             '100%': { transform: 'translateY(90%) rotate(20deg)', opacity: 0 },
@@ -245,7 +248,7 @@ function DraftBoard({ selections, totalTeams }) {
         display: 'flex',
         flexDirection: 'row-reverse',
         flexWrap: 'wrap',
-        justifyContent: 'flex-start',
+        justifyContent: 'center',
         alignContent: 'flex-start',
         gap: `${gap}px`,
         width: '100%',
@@ -297,7 +300,8 @@ function DraftBoard({ selections, totalTeams }) {
               sx={{
                 color: isWinner ? 'gold' : 'rgba(255, 255, 255, 0.9)',
                 fontWeight: 'bold',
-                fontSize: totalTeams <= 6 ? '1.25rem' : '1rem',
+                whiteSpace: 'nowrap',
+                fontSize: totalTeams <= 6 ? '1.1rem' : '0.95rem',
               }}
             >
               {getPickLabel(sel.pickNumber)}
@@ -313,7 +317,9 @@ function RevealStage({ results, onComplete, onSkip, leagueName }) {
   const { settings } = useSettings();
   const { pickIndex, phase, revealedCount, isComplete } = useRevealSequence(results.length, settings);
   const isSmallScreen = useMediaQuery('(max-width:600px)');
-  const drumRadiusPx = isSmallScreen ? 80 : 120;
+  // Bigger drum when there's vertical room for it without scrolling the popup
+  const isTallScreen = useMediaQuery('(min-height:860px)');
+  const drumRadiusPx = isSmallScreen ? 80 : isTallScreen ? 150 : 120;
 
   const current = results[pickIndex];
   const isWinnerPick = current.pickNumber === 1;
@@ -376,7 +382,14 @@ function RevealStage({ results, onComplete, onSkip, leagueName }) {
             hiddenIds={hiddenIds}
             drumRadiusPx={drumRadiusPx}
           >
-            {showReveal && <RevealedBall key={current.pickNumber} selection={current} sizePx={drumRadiusPx * 1.7} />}
+            {showReveal && (
+              <RevealedBall
+                key={current.pickNumber}
+                selection={current}
+                sizePx={drumRadiusPx * 1.7}
+                holdSeconds={settings.revealHoldSeconds}
+              />
+            )}
           </BallMachine>
         </Box>
 
