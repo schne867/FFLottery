@@ -35,6 +35,7 @@ import { SelectionAnimation } from './components/SelectionAnimation';
 import { LeagueInfo } from './components/LeagueInfo';
 import { DraftHistory } from './components/DraftHistory';
 import { TeamNameWithAvatar } from './components/TeamNameWithAvatar';
+import { SettingsDialog } from './components/SettingsDialog';
 
 function App() {
   const [leagueId, setLeagueId] = useState(() => {
@@ -603,7 +604,10 @@ function App() {
 
   const appContent = (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Paper elevation={3} sx={{ p: 4, background: 'rgba(255, 255, 255, 0.95)' }}>
+        <Paper elevation={3} sx={{ p: 4, background: 'rgba(255, 255, 255, 0.95)', position: 'relative' }}>
+        <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+          <SettingsDialog lotteryTeamCount={teamsToDisplay.length} />
+        </Box>
         {/* League Information */}
         {league && (
           <LeagueInfo
