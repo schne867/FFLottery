@@ -2,6 +2,8 @@
  * Team-related utility functions
  */
 
+import { LOTTERY } from '../constants';
+
 /**
  * Calculate win percentage for a team
  * @param {Object} team - Team object with wins, losses, ties
@@ -92,6 +94,18 @@ export function determinePlayoffAndLotteryTeams(teams, playoffSpots = 6) {
     playoffTeams,
     lotteryTeams: sortedLotteryTeams,
   };
+}
+
+/**
+ * Teams that go into the lottery, worst record first, capped at LOTTERY.MAX_TEAMS
+ * @param {Array<Object>} teams - All league teams
+ * @param {boolean} lotteryOnly - True to use only non-playoff teams
+ * @param {number} playoffSpots - Number of playoff spots (default 6)
+ * @returns {Array<Object>} Lottery teams, worst first
+ */
+export function selectLotteryTeams(teams, lotteryOnly, playoffSpots = 6) {
+  const pool = lotteryOnly ? determinePlayoffAndLotteryTeams(teams, playoffSpots).lotteryTeams : sortTeamsByRecord(teams);
+  return pool.slice(0, LOTTERY.MAX_TEAMS);
 }
 
 /**

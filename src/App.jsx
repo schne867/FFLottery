@@ -23,7 +23,7 @@ import {
 } from '@mui/icons-material';
 import { getLeagueTeams, getLeague, getLeagueDrafts } from './services/sleeperApi';
 import { validateLeagueId } from './utils/validation';
-import { sortTeamsByRecord, determinePlayoffAndLotteryTeams, formatTeamRecord } from './utils/teamUtils';
+import { selectLotteryTeams } from './utils/teamUtils';
 import { runNBALottery } from './utils/nbaLottery';
 import { calculateTotalCombinations, getCombinationSet } from './utils/combinations';
 import { LOTTERY } from './constants';
@@ -47,7 +47,7 @@ function App() {
   const [selectedSeason, setSelectedSeason] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [combinationSet, setCombinationSet] = useState('NBA_6_TEAMS');
+  const [combinationSet, setCombinationSet] = useState('NBA');
   const [lotterySlots, setLotterySlots] = useState([]); // Array of { slotId, combinations, teamId }
   const [isRunning, setIsRunning] = useState(false);
   const [showAnimation, setShowAnimation] = useState(false);
@@ -137,17 +137,7 @@ function App() {
       
       // Create slots based on selected distribution, then assign teams
       const set = LOTTERY.COMBINATION_SETS[combinationSet];
-      const isLotteryOnly = set?.lotteryOnly || false;
-      
-      let teamsForSlots;
-      if (isLotteryOnly) {
-        // Only create slots for lottery teams (non-playoff teams)
-        const { lotteryTeams } = determinePlayoffAndLotteryTeams(fetchedTeams, 6);
-        teamsForSlots = lotteryTeams;
-      } else {
-        // Create slots for all teams
-        teamsForSlots = sortTeamsByRecord(fetchedTeams);
-      }
+      const teamsForSlots = selectLotteryTeams(fetchedTeams, set?.lotteryOnly || false);
       
       // Create slots with combinations, then assign teams
       const comboArray = getCombinationSet(combinationSet, teamsForSlots.length);
@@ -172,16 +162,8 @@ function App() {
     if (teams.length === 0) return;
     
     const set = LOTTERY.COMBINATION_SETS[setKey];
-    const isLotteryOnly = set?.lotteryOnly || false;
-    
     // Determine which teams should be in slots
-    let teamsForSlots;
-    if (isLotteryOnly) {
-      const { lotteryTeams } = determinePlayoffAndLotteryTeams(teams, 6);
-      teamsForSlots = lotteryTeams;
-    } else {
-      teamsForSlots = sortTeamsByRecord(teams);
-    }
+    const teamsForSlots = selectLotteryTeams(teams, set?.lotteryOnly || false);
     
     // If switching to CUSTOM, preserve existing slot combinations if they exist
     if (setKey === 'CUSTOM' && lotterySlots.length > 0) {
@@ -514,7 +496,7 @@ function App() {
                   </Select>
                 </FormControl>
                 <Typography variant="body2" color="text.secondary">
-                  Total: {calculateTotalCombinations(allCombinationsArray)} / {LOTTERY.TOTAL_COMBINATIONS}
+                  Total: {calculateTotalCombinations(allCombinationsArray)}
                 </Typography>
               </Box>
             </Box>
@@ -552,7 +534,7 @@ function App() {
                 )}
                 
                 {/* Show playoff teams info if lottery-only mode or custom mode with 0-combination teams - displayed at bottom */}
-                {playoffTeams.length > 0 && ((LOTTERY.COMBINATION_SETS[combinationSet]?.lotteryOnly) || combinationSet === 'CUSTOM') && (
+                {playoffTeams.length > 0 && (
                   <Box sx={{ mt: 2 }}>
                     <Typography variant="subtitle2" gutterBottom>
                       Non-Lottery:

@@ -1,27 +1,88 @@
 /**
- * NBA-style lottery combination utilities
+ * Lottery odds ("combinations") for every option in LOTTERY.COMBINATION_SETS.
+ *
+ * All combination arrays follow the same pattern:
+ * - Index 0 = worst team (most combinations = highest chance at Pick #1)
+ * - Index N-1 = best team (fewest combinations)
+ * Only the ratios matter: the lottery draws each pick with probability combinations / total.
  */
 
 import { LOTTERY } from '../constants';
 
+// Real leagues' #1-pick combinations, worst seed first
+const LEAGUE_CURVES = {
+  // NBA since 2019: worst three tied at 14%
+  NBA: [140, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5],
+  // NBA 1994-2018: worst team 25%
+  NBA_CLASSIC: [250, 199, 156, 119, 88, 63, 43, 28, 17, 11, 8, 7, 6, 5],
+  // NHL (16 teams): worst team 18.5%
+  NHL: [185, 135, 115, 95, 85, 75, 65, 60, 50, 35, 30, 25, 20, 15, 5, 5],
+  // MLB (18 teams): worst three tied at 16.5%
+  MLB: [165, 165, 165, 132, 100, 75, 55, 39, 27, 18, 14, 11, 9, 8, 6, 5, 4, 2],
+};
+
 /**
- * Get default combinations for a given number of teams
- * @param {number} numTeams - Number of teams
- * @returns {Array<number>} Array of combination counts (worst to best)
+ * Stretch or squeeze a curve to `count` points by linear interpolation, keeping its endpoints.
  */
-export function getDefaultCombinations(numTeams) {
-  if (numTeams <= LOTTERY.DEFAULT_COMBINATIONS.length) {
-    return LOTTERY.DEFAULT_COMBINATIONS.slice(0, numTeams);
-  }
-  
-  // If more teams than default, extend with smaller values
-  const extended = [...LOTTERY.DEFAULT_COMBINATIONS];
-  const remaining = numTeams - LOTTERY.DEFAULT_COMBINATIONS.length;
-  for (let i = 0; i < remaining; i++) {
-    extended.push(Math.max(1, Math.floor(extended[extended.length - 1] * 0.8)));
-  }
-  
-  return extended;
+export function scaleCurve(curve, count) {
+  if (count === 1) return [curve[0]];
+  return Array.from({ length: count }, (_, i) => {
+    const position = (i * (curve.length - 1)) / (count - 1);
+    const lower = Math.floor(position);
+    const upper = Math.min(lower + 1, curve.length - 1);
+    const fraction = position - lower;
+    return curve[lower] * (1 - fraction) + curve[upper] * fraction;
+  });
+}
+
+/**
+ * Give the worst `count` teams the same (highest) odds, like the NBA and MLB anti-tanking ties.
+ */
+export function tieWorst(weights, count) {
+  const top = Math.max(...weights.slice(0, count));
+  return weights.map((weight, i) => (i < count ? top : weight));
+}
+
+/**
+ * Split `count` teams into tiers as evenly as possible (extra teams go to the worst tiers),
+ * returning each team's tier weight.
+ */
+export function splitIntoTiers(count, tierWeights) {
+  const baseSize = Math.floor(count / tierWeights.length);
+  const extra = count % tierWeights.length;
+  return tierWeights.flatMap((weight, tier) => Array(baseSize + (tier < extra ? 1 : 0)).fill(weight));
+}
+
+// Scale weights to about 1000 whole combinations; every team keeps at least 1 so it stays drawable
+function toCombinations(weights) {
+  const sum = weights.reduce((total, weight) => total + weight, 0);
+  return weights.map(weight => Math.max(1, Math.round((weight / sum) * 1000)));
+}
+
+// Worst quarter of the lottery (rounded up) is tied at the top
+const tiedWorstQuarter = count => Math.ceil(count / 4);
+
+const RULES = {
+  TIERED_421: count => splitIntoTiers(count, [400, 200, 100]),
+  TIERED_321: count => splitIntoTiers(count, [300, 200, 100]),
+  NBA: count => toCombinations(tieWorst(scaleCurve(LEAGUE_CURVES.NBA, count), tiedWorstQuarter(count))),
+  NBA_CLASSIC: count => toCombinations(scaleCurve(LEAGUE_CURVES.NBA_CLASSIC, count)),
+  NHL: count => toCombinations(scaleCurve(LEAGUE_CURVES.NHL, count)),
+  MLB: count => toCombinations(tieWorst(scaleCurve(LEAGUE_CURVES.MLB, count), tiedWorstQuarter(count))),
+  LINEAR: count => toCombinations(Array.from({ length: count }, (_, i) => count - i)),
+  HALVING: count => toCombinations(Array.from({ length: count }, (_, i) => 2 ** (count - 1 - i))),
+  EQUAL: count => Array(count).fill(100),
+};
+
+/**
+ * Combinations for a lottery of `numTeams` teams under the given option (worst team first).
+ * Custom and unknown options start from NBA odds.
+ */
+export function getCombinationSet(setKey, numTeams) {
+  const count = Math.min(numTeams, LOTTERY.MAX_TEAMS);
+  if (count <= 0) return [];
+  const rule = RULES[setKey] || RULES.NBA;
+  return rule(count);
 }
 
 /**
@@ -70,154 +131,4 @@ export function validateCombinations(combinations) {
   }
   
   return { isValid: true, error: null };
-}
-
-/**
- * Generate equal distribution combinations
- * 
- * IMPORTANT: All combination arrays follow the same pattern:
- * - Index 0 = worst team (gets most combinations = highest chance at Pick #1)
- * - Index N-1 = best team (gets least combinations = lowest chance at Pick #1)
- * 
- * The lottery selects Pick #1 (winner) FIRST, then Pick #2, Pick #3, etc.
- * But displays results in reverse order (worst pick first, winner last).
- * 
- * @param {number} numTeams - Number of teams
- * @param {number} total - Total combinations (default 1000)
- * @returns {Array<number>} Array of equal combination counts (worst to best)
- */
-export function generateEqualCombinations(numTeams, total = 1000) {
-  const base = Math.floor(total / numTeams);
-  const remainder = total % numTeams;
-  const combinations = Array(numTeams).fill(base);
-  
-  // Distribute remainder to first teams (worst teams get slightly more)
-  for (let i = 0; i < remainder; i++) {
-    combinations[i]++;
-  }
-  
-  return combinations;
-}
-
-/**
- * Generate linear distribution combinations
- * 
- * IMPORTANT: All combination arrays follow the same pattern:
- * - Index 0 = worst team (gets most combinations = highest chance at Pick #1)
- * - Index N-1 = best team (gets least combinations = lowest chance at Pick #1)
- * 
- * The lottery selects Pick #1 (winner) FIRST, then Pick #2, Pick #3, etc.
- * But displays results in reverse order (worst pick first, winner last).
- * 
- * @param {number} numTeams - Number of teams
- * @param {number} total - Total combinations (default 1000)
- * @returns {Array<number>} Array of combination counts (worst to best)
- */
-export function generateLinearCombinations(numTeams, total = 1000) {
-  // Calculate sum of 1+2+3+...+n = n*(n+1)/2
-  const sum = (numTeams * (numTeams + 1)) / 2;
-  const combinations = [];
-  
-  for (let i = 0; i < numTeams; i++) {
-    // Worst team (i=0) gets numTeams shares, best gets 1 share
-    const shares = numTeams - i;
-    combinations.push(Math.round((shares / sum) * total));
-  }
-  
-  // Adjust to ensure total is exactly correct
-  const currentTotal = calculateTotalCombinations(combinations);
-  const difference = total - currentTotal;
-  if (difference !== 0) {
-    combinations[0] += difference; // Add/subtract difference from worst team
-  }
-  
-  return combinations;
-}
-
-/**
- * Generate exponential distribution combinations
- * 
- * IMPORTANT: All combination arrays follow the same pattern:
- * - Index 0 = worst team (gets most combinations = highest chance at Pick #1)
- * - Index N-1 = best team (gets least combinations = lowest chance at Pick #1)
- * 
- * The lottery selects Pick #1 (winner) FIRST, then Pick #2, Pick #3, etc.
- * But displays results in reverse order (worst pick first, winner last).
- * 
- * @param {number} numTeams - Number of teams
- * @param {number} total - Total combinations (default 1000)
- * @returns {Array<number>} Array of combination counts (worst to best)
- */
-export function generateExponentialCombinations(numTeams, total = 1000) {
-  // Use exponential weights: 2^(n-i) for team i (worst team i=0 gets 2^n)
-  const combinations = [];
-  let sum = 0;
-  
-  // Calculate weights
-  for (let i = 0; i < numTeams; i++) {
-    const weight = Math.pow(2, numTeams - i - 1);
-    combinations.push(weight);
-    sum += weight;
-  }
-  
-  // Scale to total
-  for (let i = 0; i < numTeams; i++) {
-    combinations[i] = Math.round((combinations[i] / sum) * total);
-  }
-  
-  // Adjust to ensure total is exactly correct
-  const currentTotal = calculateTotalCombinations(combinations);
-  const difference = total - currentTotal;
-  if (difference !== 0) {
-    combinations[0] += difference; // Add/subtract difference from worst team
-  }
-  
-  return combinations;
-}
-
-/**
- * Get combination set by key
- * 
- * IMPORTANT: All combination arrays returned follow the same pattern:
- * - Index 0 = worst team (gets most combinations = highest chance at Pick #1)
- * - Index N-1 = best team (gets least combinations = lowest chance at Pick #1)
- * 
- * The lottery selects Pick #1 (winner) FIRST, then Pick #2, Pick #3, etc.
- * But displays results in reverse order (worst pick first, winner last).
- * 
- * @param {string} setKey - Key of the combination set
- * @param {number} numTeams - Number of teams
- * @returns {Array<number>} Array of combination counts (worst to best)
- */
-export function getCombinationSet(setKey, numTeams) {
-  const set = LOTTERY.COMBINATION_SETS[setKey];
-  if (!set) {
-    return getDefaultCombinations(numTeams);
-  }
-  
-  if (set.combinations) {
-    // Fixed set (like NBA_12_TEAMS)
-    if (numTeams <= set.combinations.length) {
-      return set.combinations.slice(0, numTeams);
-    }
-    // Extend if more teams
-    const extended = [...set.combinations];
-    const remaining = numTeams - set.combinations.length;
-    for (let i = 0; i < remaining; i++) {
-      extended.push(Math.max(1, Math.floor(extended[extended.length - 1] * 0.8)));
-    }
-    return extended;
-  }
-  
-  // Dynamic sets
-  switch (setKey) {
-    case 'EQUAL':
-      return generateEqualCombinations(numTeams, set.total);
-    case 'LINEAR':
-      return generateLinearCombinations(numTeams, set.total);
-    case 'EXPONENTIAL':
-      return generateExponentialCombinations(numTeams, set.total);
-    default:
-      return getDefaultCombinations(numTeams);
-  }
 }

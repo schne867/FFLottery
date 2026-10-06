@@ -39,56 +39,21 @@ export const LOTTERY = {
   DEFAULT_DELAY_MS: 1500,
   MIN_ODDS: 0,
   DEFAULT_ODDS: 1,
-  TOTAL_COMBINATIONS: 1000,
-  // Default NBA-style combination distribution for 12 teams
-  // Worst team (position 1) gets most combinations, best team gets least
-  DEFAULT_COMBINATIONS: [155, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15],
-  // Predefined combination sets
+  // Largest lottery the app supports; extra teams are left out (best records first)
+  MAX_TEAMS: 12,
+  // Odds options. Each works for any lottery size (1 to MAX_TEAMS); the rules live in
+  // utils/combinations.js. lotteryOnly = only non-playoff teams are in the lottery.
   COMBINATION_SETS: {
-    NBA_6_TEAMS: {
-      name: 'NBA Style (6 Teams)',
-      // Scaled from 12-team: positions 7-12 (worst lottery team = 7th overall, best lottery team = 12th overall)
-      // Original: [75, 60, 45, 30, 20, 15] = 245 total, scaled to 1000
-      combinations: [306, 245, 184, 122, 82, 61],
-      total: 1000,
-      lotteryOnly: true, // Only non-playoff teams eligible
-    },
-    NBA_12_TEAMS: {
-      name: 'NBA Style (12 Teams)',
-      // Official NBA values for positions 1-12, with teams 13-14 combinations (10+5=15) added to team 1
-      combinations: [155, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15],
-      total: 1000,
-    },
-    NBA_14_TEAMS: {
-      name: 'NBA Style (14 Teams) - Official',
-      // Official NBA lottery combinations (exact values from NBA)
-      // Seed 1-3: 140 each (14% chance at pick 1)
-      // Seed 4: 125 (12.5%), Seed 5: 105 (10.5%), Seed 6: 90 (9%), Seed 7: 75 (7.5%)
-      // Seed 8: 60 (6%), Seed 9: 45 (4.5%), Seed 10: 30 (3%), Seed 11: 20 (2%)
-      // Seed 12: 15 (1.5%), Seed 13: 10 (1%), Seed 14: 5 (0.5%)
-      combinations: [140, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5],
-      total: 1000,
-    },
-    EQUAL: {
-      name: 'Equal Distribution',
-      combinations: null, // Will be calculated based on team count
-      total: 1000,
-    },
-    LINEAR: {
-      name: 'Linear Distribution',
-      combinations: null, // Will be calculated based on team count
-      total: 1000,
-    },
-    EXPONENTIAL: {
-      name: 'Exponential Distribution',
-      combinations: null, // Will be calculated based on team count
-      total: 1000,
-    },
-    CUSTOM: {
-      name: 'Custom',
-      combinations: null, // User-defined, defaults to NBA style
-      total: 1000,
-    },
+    TIERED_421: { name: 'Tiered 4-2-1 (each third half the odds)', lotteryOnly: true },
+    TIERED_321: { name: 'Tiered 3-2-1', lotteryOnly: true },
+    NBA: { name: 'NBA (2019–present)', lotteryOnly: true },
+    NBA_CLASSIC: { name: 'NBA Classic (1994–2018)', lotteryOnly: true },
+    NHL: { name: 'NHL', lotteryOnly: true },
+    MLB: { name: 'MLB', lotteryOnly: true },
+    LINEAR: { name: 'Linear', lotteryOnly: false },
+    HALVING: { name: 'Halving (each team half the one above)', lotteryOnly: false },
+    EQUAL: { name: 'Equal', lotteryOnly: false },
+    CUSTOM: { name: 'Custom', lotteryOnly: false },
   },
 };
 

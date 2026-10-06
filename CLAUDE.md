@@ -40,11 +40,11 @@ This is a React/Vite application for running weighted lottery selections for fan
 - `runNBALottery()` - Full lottery execution with selection from Pick #1 to last pick
 - Selection order is winner-first, display order is reversed for dramatic reveal
 
-**`src/utils/combinations.js`** - Combination distribution calculations for different lottery styles (NBA, Equal, Linear, Exponential)
+**`src/utils/combinations.js`** - Odds rules for every combination option (tiered, NBA/NBA Classic/NHL/MLB curves scaled to the lottery size, Linear, Halving, Equal); each works for 1 to `LOTTERY.MAX_TEAMS` (12) teams
 
 **`src/constants/index.js`** - Configuration including:
 - Sleeper API endpoints
-- Predefined combination distributions (NBA 6/12/14 teams, Equal, Linear, etc.)
+- `LOTTERY.COMBINATION_SETS` - the odds options (name + `lotteryOnly`) and `LOTTERY.MAX_TEAMS` (12-team lottery cap)
 - `POINTS_AGAINST.ENABLED` toggle for expensive matchup calculations
 
 **`src/settings/`** - User settings:
@@ -72,4 +72,4 @@ Lottery uses a slot-based architecture where:
 - Slots have fixed combination values (odds)
 - Teams are assigned to slots via drag-and-drop
 - Swapping teams moves them between slots without changing combinations
-- "Lottery-only" modes (e.g., NBA 6 Teams) exclude playoff teams from slots
+- "Lottery-only" options (tiered and real-league ones) exclude playoff teams from slots; `selectLotteryTeams()` picks the worst teams, capped at 12
