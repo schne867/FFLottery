@@ -9,7 +9,8 @@
 
 import { LOTTERY } from '../constants';
 
-// Real leagues' #1-pick combinations, worst seed first
+// Real leagues' #1-pick combinations, worst seed first. A lottery of N teams uses the
+// league's real numbers for its N worst seeds.
 const LEAGUE_CURVES = {
   // NBA since 2019: worst three tied at 14%
   NBA: [140, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15, 10, 5],
@@ -20,28 +21,6 @@ const LEAGUE_CURVES = {
   // MLB (18 teams): worst three tied at 16.5%
   MLB: [165, 165, 165, 132, 100, 75, 55, 39, 27, 18, 14, 11, 9, 8, 6, 5, 4, 2],
 };
-
-/**
- * Stretch or squeeze a curve to `count` points by linear interpolation, keeping its endpoints.
- */
-export function scaleCurve(curve, count) {
-  if (count === 1) return [curve[0]];
-  return Array.from({ length: count }, (_, i) => {
-    const position = (i * (curve.length - 1)) / (count - 1);
-    const lower = Math.floor(position);
-    const upper = Math.min(lower + 1, curve.length - 1);
-    const fraction = position - lower;
-    return curve[lower] * (1 - fraction) + curve[upper] * fraction;
-  });
-}
-
-/**
- * Give the worst `count` teams the same (highest) odds, like the NBA and MLB anti-tanking ties.
- */
-export function tieWorst(weights, count) {
-  const top = Math.max(...weights.slice(0, count));
-  return weights.map((weight, i) => (i < count ? top : weight));
-}
 
 /**
  * Split `count` teams into tiers as evenly as possible (extra teams go to the worst tiers),
@@ -59,18 +38,14 @@ function toCombinations(weights) {
   return weights.map(weight => Math.max(1, Math.round((weight / sum) * 1000)));
 }
 
-// Worst quarter of the lottery (rounded up) is tied at the top
-const tiedWorstQuarter = count => Math.ceil(count / 4);
-
 const RULES = {
   TIERED_421: count => splitIntoTiers(count, [400, 200, 100]),
   TIERED_321: count => splitIntoTiers(count, [300, 200, 100]),
-  NBA: count => toCombinations(tieWorst(scaleCurve(LEAGUE_CURVES.NBA, count), tiedWorstQuarter(count))),
-  NBA_CLASSIC: count => toCombinations(scaleCurve(LEAGUE_CURVES.NBA_CLASSIC, count)),
-  NHL: count => toCombinations(scaleCurve(LEAGUE_CURVES.NHL, count)),
-  MLB: count => toCombinations(tieWorst(scaleCurve(LEAGUE_CURVES.MLB, count), tiedWorstQuarter(count))),
+  NBA: count => LEAGUE_CURVES.NBA.slice(0, count),
+  NBA_CLASSIC: count => LEAGUE_CURVES.NBA_CLASSIC.slice(0, count),
+  NHL: count => LEAGUE_CURVES.NHL.slice(0, count),
+  MLB: count => LEAGUE_CURVES.MLB.slice(0, count),
   LINEAR: count => toCombinations(Array.from({ length: count }, (_, i) => count - i)),
-  HALVING: count => toCombinations(Array.from({ length: count }, (_, i) => 2 ** (count - 1 - i))),
   EQUAL: count => Array(count).fill(100),
 };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOTTERY } from '../constants';
-import { calculateTotalCombinations, getCombinationSet, scaleCurve, splitIntoTiers, tieWorst } from './combinations';
+import { calculateTotalCombinations, getCombinationSet, splitIntoTiers } from './combinations';
 
 const percentages = combos => {
   const total = calculateTotalCombinations(combos);
@@ -19,7 +19,6 @@ describe('every combination option', () => {
       'NHL',
       'MLB',
       'LINEAR',
-      'HALVING',
       'EQUAL',
       'CUSTOM',
     ]);
@@ -60,21 +59,23 @@ describe('tiered options', () => {
 });
 
 describe('real-league options', () => {
-  it('NBA ties the worst quarter of teams, like the NBA ties its worst three', () => {
-    const six = getCombinationSet('NBA', 6);
-    expect(six[0]).toBe(six[1]);
-    expect(six[2]).toBeLessThan(six[1]);
-    const twelve = getCombinationSet('NBA', 12);
-    expect(twelve.slice(0, 3)).toEqual([twelve[0], twelve[0], twelve[0]]);
-    expect(twelve[3]).toBeLessThan(twelve[2]);
-    expect(percentages(six)).toEqual([32.0, 32.0, 19.9, 11.0, 4.1, 1.1]);
+  it("use each league's real odds for its N worst teams", () => {
+    expect(getCombinationSet('NBA', 6)).toEqual([140, 140, 140, 125, 105, 90]);
+    expect(getCombinationSet('NBA_CLASSIC', 6)).toEqual([250, 199, 156, 119, 88, 63]);
+    expect(getCombinationSet('NHL', 6)).toEqual([185, 135, 115, 95, 85, 75]);
+    expect(getCombinationSet('MLB', 6)).toEqual([165, 165, 165, 132, 100, 75]);
   });
 
-  it('NBA Classic, NHL, and MLB follow their leagues\' curves', () => {
-    expect(percentages(getCombinationSet('NBA_CLASSIC', 6))).toEqual([52.7, 28.2, 12.4, 4.0, 1.6, 1.1]);
-    expect(percentages(getCombinationSet('NHL', 6))).toEqual([45.7, 23.5, 16.0, 8.6, 4.9, 1.2]);
-    const mlb = getCombinationSet('MLB', 12);
-    expect(mlb.slice(0, 3)).toEqual([mlb[0], mlb[0], mlb[0]]);
+  it('keep the 6th team of a 6-team lottery well above 1%', () => {
+    expect(percentages(getCombinationSet('NBA', 6))).toEqual([18.9, 18.9, 18.9, 16.9, 14.2, 12.2]);
+    expect(percentages(getCombinationSet('NBA_CLASSIC', 6))).toEqual([28.6, 22.7, 17.8, 13.6, 10.1, 7.2]);
+    expect(percentages(getCombinationSet('NHL', 6))).toEqual([26.8, 19.6, 16.7, 13.8, 12.3, 10.9]);
+    expect(percentages(getCombinationSet('MLB', 6))).toEqual([20.6, 20.6, 20.6, 16.5, 12.5, 9.4]);
+  });
+
+  it('match the real 12th seed in a 12-team lottery', () => {
+    expect(getCombinationSet('NBA', 12)).toEqual([140, 140, 140, 125, 105, 90, 75, 60, 45, 30, 20, 15]);
+    expect(percentages(getCombinationSet('NHL', 12)).at(-1)).toBe(2.6);
   });
 
   it('defaults Custom to NBA odds', () => {
@@ -91,30 +92,12 @@ describe('simple options', () => {
     expect(percentages(getCombinationSet('LINEAR', 6))).toEqual([28.6, 23.8, 19.0, 14.3, 9.5, 4.8]);
   });
 
-  it('Halving gives each team half the odds of the team above, never zero', () => {
-    expect(percentages(getCombinationSet('HALVING', 6))).toEqual([50.8, 25.4, 12.7, 6.3, 3.2, 1.6]);
-    expect(Math.min(...getCombinationSet('HALVING', 12))).toBeGreaterThanOrEqual(1);
-  });
-
   it('falls back to NBA odds for an unknown option', () => {
     expect(getCombinationSet('NOT_A_SET', 6)).toEqual(getCombinationSet('NBA', 6));
   });
 });
 
-describe('curve helpers', () => {
-  it('scaleCurve keeps a curve unchanged at its own length and keeps its endpoints at any length', () => {
-    const curve = [10, 8, 5, 1];
-    expect(scaleCurve(curve, 4)).toEqual(curve);
-    const stretched = scaleCurve(curve, 7);
-    expect(stretched[0]).toBe(10);
-    expect(stretched[6]).toBe(1);
-    expect(scaleCurve(curve, 1)).toEqual([10]);
-  });
-
-  it('tieWorst raises the worst teams to the top value', () => {
-    expect(tieWorst([10, 8, 5, 1], 2)).toEqual([10, 10, 5, 1]);
-  });
-
+describe('tier helper', () => {
   it('splitIntoTiers sizes tiers as evenly as possible, worst tiers first', () => {
     expect(splitIntoTiers(7, [4, 2, 1])).toEqual([4, 4, 4, 2, 2, 1, 1]);
     expect(splitIntoTiers(2, [4, 2, 1])).toEqual([4, 2]);

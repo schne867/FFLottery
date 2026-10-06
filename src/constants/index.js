@@ -51,7 +51,6 @@ export const LOTTERY = {
     NHL: { name: 'NHL', lotteryOnly: true },
     MLB: { name: 'MLB', lotteryOnly: true },
     LINEAR: { name: 'Linear', lotteryOnly: false },
-    HALVING: { name: 'Halving (each team half the one above)', lotteryOnly: false },
     EQUAL: { name: 'Equal', lotteryOnly: false },
     CUSTOM: { name: 'Custom', lotteryOnly: false },
   },
